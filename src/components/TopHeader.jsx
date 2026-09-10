@@ -1,9 +1,9 @@
 import React from "react";
-import { Flame, Zap, Volume2, VolumeX, ChevronRight } from "lucide-react";
+import { Flame, Zap, Volume2, VolumeX, ChevronRight, LogOut } from "lucide-react";
 import { useGameState } from "../context/GameStateContext";
 
 export function TopHeader() {
-  const { activeView, navigateTo, xp, streakDays, soundEnabled, toggleSound, profile, currentMissionId } = useGameState();
+  const { activeView, navigateTo, xp, streakDays, soundEnabled, toggleSound, profile, currentMissionId, logout } = useGameState();
 
   const getBreadcrumb = () => {
     switch (activeView) {
@@ -19,6 +19,12 @@ export function TopHeader() {
         return "My profile";
       default:
         return "Dashboard";
+    }
+  };
+
+  const handleLogout = () => {
+    if (window.confirm("Are you sure you want to log out of your expedition session?")) {
+      logout();
     }
   };
 
@@ -39,7 +45,7 @@ export function TopHeader() {
       </div>
 
       {/* Stats and Profile Badges */}
-      <div className="flex items-center gap-5">
+      <div className="flex items-center gap-4 sm:gap-5">
         {/* Streak */}
         <div className="flex items-center gap-1.5 text-xs font-bold text-[#A85822]">
           <Flame className="w-4 h-4 text-[#D96B27] fill-[#D96B27]" />
@@ -68,9 +74,19 @@ export function TopHeader() {
         {/* User Avatar Circle */}
         <button
           onClick={() => navigateTo("profile")}
+          title="View explorer profile"
           className="w-8 h-8 rounded-full bg-[#E8DDD1] text-[#7A5B3D] flex items-center justify-center font-bold text-xs shadow-sm hover:ring-2 hover:ring-[#2A6B53] transition-all"
         >
           {profile.avatarInitials}
+        </button>
+
+        {/* Logout Button */}
+        <button
+          onClick={handleLogout}
+          title="Log out of session"
+          className="w-8 h-8 rounded-full flex items-center justify-center text-[#7C9084] hover:text-[#C55038] hover:bg-[#FDF2F0] transition-colors"
+        >
+          <LogOut className="w-4 h-4" />
         </button>
       </div>
     </header>

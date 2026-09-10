@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Check, ArrowRight, Zap, Flame, BookOpen, User, RotateCcw } from "lucide-react";
+import { Check, ArrowRight, Zap, Flame, BookOpen, User, RotateCcw, LogOut } from "lucide-react";
 import { useGameState } from "../context/GameStateContext";
 import { soundEngine } from "../utils/audio";
 
@@ -12,7 +12,8 @@ export function ProfileView() {
     completedMissions,
     expeditionLog,
     navigateTo,
-    resetProgress
+    resetProgress,
+    logout
   } = useGameState();
 
   const [name, setName] = useState(profile.name);
@@ -25,6 +26,12 @@ export function ProfileView() {
     updateProfile({ name, studentId });
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2500);
+  };
+
+  const handleLogout = () => {
+    if (window.confirm("Are you sure you want to log out of your expedition session?")) {
+      logout();
+    }
   };
 
   return (
@@ -58,6 +65,9 @@ export function ProfileView() {
             <div className="text-xs font-semibold text-[#668074]">
               {profile.role} · Level {profile.level}
             </div>
+            {profile.email && (
+              <div className="text-[11px] text-[#8C9C92]">{profile.email}</div>
+            )}
           </div>
 
           {/* Edit Form */}
@@ -93,8 +103,17 @@ export function ProfileView() {
             </button>
           </form>
 
-          {/* Reset progress option */}
-          <div className="pt-2">
+          {/* Session & Reset Actions */}
+          <div className="pt-2 border-t border-[#F0F4F0] space-y-2">
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-full py-2.5 px-4 rounded-xl bg-[#FDF2F0] hover:bg-[#FAE5E2] text-[#B83E2C] font-bold text-xs transition-colors flex items-center justify-center gap-1.5"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Log out of session</span>
+            </button>
+
             <button
               onClick={() => {
                 if (window.confirm("Reset your progress to initial state?")) {
@@ -103,7 +122,7 @@ export function ProfileView() {
                   setStudentId("NEXA-001");
                 }
               }}
-              className="text-[11px] font-semibold text-[#8C9C92] hover:text-[#C55038] transition-colors flex items-center justify-center gap-1 mx-auto"
+              className="text-[11px] font-semibold text-[#8C9C92] hover:text-[#C55038] transition-colors flex items-center justify-center gap-1 mx-auto pt-1"
             >
               <RotateCcw className="w-3 h-3" />
               <span>Reset demo progress</span>

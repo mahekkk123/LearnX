@@ -7,6 +7,7 @@ import { QuestMapView } from "./views/QuestMapView";
 import { MissionLabView } from "./views/MissionLabView";
 import { AchievementsView } from "./views/AchievementsView";
 import { ProfileView } from "./views/ProfileView";
+import { AuthView } from "./views/AuthView";
 
 function MainContent() {
   const { activeView } = useGameState();
@@ -38,13 +39,25 @@ function MainContent() {
   );
 }
 
+function AuthenticatedApp() {
+  const { isAuthenticated } = useGameState();
+
+  if (!isAuthenticated) {
+    return <AuthView />;
+  }
+
+  return (
+    <div className="flex min-h-screen bg-[#F8F9F5]">
+      <Sidebar />
+      <MainContent />
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <GameStateProvider>
-      <div className="flex min-h-screen bg-[#F8F9F5]">
-        <Sidebar />
-        <MainContent />
-      </div>
+      <AuthenticatedApp />
     </GameStateProvider>
   );
 }

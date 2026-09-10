@@ -30,14 +30,26 @@ This document provides a comprehensive breakdown of all technologies, libraries,
 
 | Component | Technology | Description |
 | :--- | :--- | :--- |
-| **Icons** | **Lucide React (`^0.475.0`)** | Clean, scalable SVG icons used throughout the sidebar, top header, status pills, and action buttons (`BookOpen`, `Map`, `Award`, `User`, `Target`, `Flame`, `Zap`, `Brain`, `Terminal`, `CheckCircle2`, `Volume2`, etc.). |
+| **Icons** | **Lucide React (`^0.475.0`)** | Clean, scalable SVG icons used throughout the sidebar, top header, status pills, and action buttons (`BookOpen`, `Map`, `Award`, `User`, `Target`, `Flame`, `Zap`, `Brain`, `Terminal`, `CheckCircle2`, `Volume2`, `Eye`, `EyeOff`, `LogOut`, etc.). |
 | **Biome Art** | **Custom Scalable Vector Graphics (SVG)** | Hand-crafted SVG vector illustrations in `src/components/BiomeVectorArt.jsx` for all 6 biomes: Undersea Reef, Eco Woods, Canyon Vault, Mountain Pass, Metro Grid, and Frost Core. |
 | **NOVA Mascot** | **Vector Robot Mascot** | Custom vector illustration of NOVA, the friendly AI companion bot with animated antennas, screen expressions, and dialogue bubbles. |
 | **World Map** | **Interactive 2.5D SVG Map** | Scalable 2.5D biome island map with zoom controls (`+`, `-`, reset), dynamic route trails, and mission status nodes (Completed, Current, Locked). |
 
 ---
 
-## 4. Python Execution Engine (In-Browser Execution)
+## 4. Authentication & Protected Navigation
+
+| Feature | Implementation | Details |
+| :--- | :--- | :--- |
+| **Authentication Flow** | `src/views/AuthView.jsx` | Dedicated cozy RPG styled Login and Sign Up views with email/password validation, show/hide password toggles, and friendly error alerts. |
+| **One-Click Demo Login** | Demo Pre-fill | One-click button pre-populating `alex@nexa.dev` / `python123` for instant evaluation. |
+| **Session Persistence** | `localStorage` (`learnx_auth_session`) | Maintains login state across browser page refreshes (`F5`). |
+| **Route Protection** | Guard in `src/App.jsx` | Unauthenticated visitors see the Login page first; dashboard and learning features unlock upon successful authentication. |
+| **Logout Functionality** | Top Header & Profile | Easily accessible logout buttons in `TopHeader.jsx` and `ProfileView.jsx`. |
+
+---
+
+## 5. Python Execution Engine (In-Browser Execution)
 
 | Engine | Layer | Features |
 | :--- | :--- | :--- |
@@ -47,7 +59,7 @@ This document provides a comprehensive breakdown of all technologies, libraries,
 
 ---
 
-## 5. Sound Synthesis & Audio Engine
+## 6. Sound Synthesis & Audio Engine
 
 | Engine | Implementation | Sounds Synthesized |
 | :--- | :--- | :--- |
@@ -57,7 +69,7 @@ This document provides a comprehensive breakdown of all technologies, libraries,
 
 ---
 
-## 6. Gamification, State & Persistence
+## 7. Gamification, State & Persistence
 
 | Feature | Implementation | Details |
 | :--- | :--- | :--- |
@@ -68,7 +80,7 @@ This document provides a comprehensive breakdown of all technologies, libraries,
 
 ---
 
-## 7. Project Directory Structure
+## 8. Project Directory Structure
 
 ```
 learnx/
@@ -82,10 +94,10 @@ learnx/
 │   └── logo.svg                 # Application brand vector icon
 └── src/
     ├── main.jsx                 # React root mount point
-    ├── App.jsx                  # Main application shell and view router
+    ├── App.jsx                  # Main application shell with auth guard
     ├── index.css                # Global CSS with Tailwind and custom scrollbars
     ├── context/
-    │   └── GameStateContext.jsx # Central state & persistence (XP, streak, badges)
+    │   └── GameStateContext.jsx # Central state & persistence (Auth, XP, streak, badges)
     ├── data/
     │   ├── curriculum.js        # 8 interactive levels & Bloom's taxonomy mapping
     │   └── achievements.js      # 6 collectible badges and unlock metadata
@@ -94,13 +106,14 @@ learnx/
     │   └── pythonRunner.js      # Dual-mode in-browser Python execution engine
     ├── components/
     │   ├── Sidebar.jsx          # Left navigation bar with daily goal card
-    │   ├── TopHeader.jsx        # Breadcrumbs, streak, XP, audio toggle, and profile
+    │   ├── TopHeader.jsx        # Breadcrumbs, streak, XP, audio toggle, avatar, logout
     │   ├── BiomeVectorArt.jsx   # Custom SVG illustrations (islands, map, NOVA)
     │   └── CelebrationModal.jsx # Confetti and victory modal
     └── views/
-        ├── DashboardView.jsx    # Base Camp greeting, hero, stats, and roadmap
+        ├── AuthView.jsx         # Login and Sign Up authentication page
+        ├── DashboardView.jsx    # Base Camp dashboard
         ├── QuestMapView.jsx     # Interactive 6-biome world map and mission drawer
         ├── MissionLabView.jsx   # Code editor, terminal, hint system, and live runner
         ├── AchievementsView.jsx # Badges and medals collection grid
-        └── ProfileView.jsx      # Explorer profile editor and expedition log
+        └── ProfileView.jsx      # Explorer profile editor, expedition log, logout
 ```
