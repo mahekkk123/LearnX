@@ -1,298 +1,724 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+} from "react";
+
 import { soundEngine } from "../utils/audio";
 import { LEVELS_DATA } from "../data/curriculum";
+import { supabase } from "../lib/supabaseClient";
 
 const GameStateContext = createContext(null);
 
 const STORAGE_KEY = "learnx_game_state_v1";
-const AUTH_SESSION_KEY = "learnx_auth_session";
-const USERS_DB_KEY = "learnx_users_db";
-
-const DEFAULT_USERS = {
-  "alex@nexa.dev": {
-    name: "Alex",
-    email: "alex@nexa.dev",
-    password: "python123",
-    role: "Aspiring Developer",
-    studentId: "NEXA-001"
-  }
-};
 
 const INITIAL_STATE = {
-  activeView: "dashboard", // "dashboard", "quest_map", "mission_lab", "achievements", "profile"
+  activeView: "dashboard",
   currentMissionId: 2,
   completedMissions: [1],
   xp: 50,
   streakDays: 2,
   badges: ["first_line"],
+
   badgeDates: {
-    first_line: "2026-09-09"
+    first_line: "2026-09-09",
   },
+
   profile: {
     name: "Alex",
     email: "alex@nexa.dev",
     studentId: "NEXA-001",
     role: "Aspiring Developer",
     level: 2,
-    avatarInitials: "AL"
+    avatarInitials: "AL",
   },
+
   expeditionLog: [
-    { id: 1, title: "First Day", date: "2026-09-09", xp: 50 }
+    {
+      id: 1,
+      title: "First Day",
+      date: "2026-09-09",
+      xp: 50,
+    },
   ],
+
   soundEnabled: true,
-  filterBiome: "all"
+  filterBiome: "all",
 };
 
 export function GameStateProvider({ children }) {
+  // -----------------------------
   // Authentication State
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    try {
-      const session = localStorage.getItem(AUTH_SESSION_KEY);
-      return !!session;
-    } catch {
-      return false;
-    }
-  });
+  // -----------------------------
 
-  const [currentUser, setCurrentUser] = useState(() => {
-    try {
-      const session = localStorage.getItem(AUTH_SESSION_KEY);
-      if (session) return JSON.parse(session);
-    } catch {}
-    return null;
-  });
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
 
-  // Ensure default users exist in localStorage
+  // -----------------------------
+  // Main Game State
+  // -----------------------------
+
+  const [state, setState] = useState(INITIAL_STATE);
+
+  // Prevents saving before Supabase
+  // data has finished loading.
+  const hydratedUserId = useRef(null);
+
+  // Prevents unnecessary overlapping saves.
+  const saveTimer = useRef(null);
+
+  // -----------------------------
+  // Check Supabase Session
+  // -----------------------------
+
   useEffect(() => {
-    try {
-      const existing = localStorage.getItem(USERS_DB_KEY);
-      if (!existing) {
-        localStorage.setItem(USERS_DB_KEY, JSON.stringify(DEFAULT_USERS));
+    const getSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (session?.user) {
+        const user = session.user;
+
+        const sessionData = {
+          id: user.id,
+          name: user.user_metadata?.name || "LearnX User",
+          email: user.email,
+          role:
+            user.user_metadata?.role ||
+            "Aspiring Developer",
+          studentId:
+            user.user_metadata?.studentId || "",
+        };
+
+        setCurrentUser(sessionData);
+        setIsAuthenticated(true);
+      } else {
+        setCurrentUser(null);
+        setIsAuthenticated(false);
+        hydratedUserId.current = null;
       }
-    } catch (e) {
-      console.warn("Failed to initialize users DB", e);
-    }
+    };
+
+    getSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (session?.user) {
+          const user = session.user;
+
+          const sessionData = {
+            id: user.id,
+            name:
+              user.user_metadata?.name ||
+              "LearnX User",
+            email: user.email,
+            role:
+              user.user_metadata?.role ||
+              "Aspiring Developer",
+            studentId:
+              user.user_metadata?.studentId || "",
+          };
+
+          setCurrentUser(sessionData);
+          setIsAuthenticated(true);
+        } else {
+          setCurrentUser(null);
+          setIsAuthenticated(false);
+          hydratedUserId.current = null;
+        }
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  // Main Game State
-  const [state, setState] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return { ...INITIAL_STATE, ...parsed };
-      }
-    } catch (e) {
-      console.warn("Failed to read from localStorage", e);
-    }
-    return INITIAL_STATE;
-  });
+  // -----------------------------
+  // LOAD GAME STATE FROM SUPABASE
+  // -----------------------------
 
-  // Keep soundEngine in sync
+  useEffect(() => {
+    if (!currentUser?.id) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadGameState = async () => {
+      console.log(
+        "Loading LearnX progress for:",
+        currentUser.email
+      );
+
+      const { data, error } = await supabase
+        .from("game_progress")
+        .select("game_state")
+        .eq("user_id", currentUser.id)
+        .maybeSingle();
+
+      if (cancelled) {
+        return;
+      }
+
+      if (error) {
+        console.error(
+          "Failed to load game progress:",
+          error
+        );
+
+        // Allow the application to work even if
+        // Supabase loading fails.
+        hydratedUserId.current = currentUser.id;
+        return;
+      }
+
+      if (data?.game_state) {
+        console.log(
+          "Existing LearnX progress loaded."
+        );
+
+        setState({
+          ...INITIAL_STATE,
+          ...data.game_state,
+          profile: {
+            ...INITIAL_STATE.profile,
+            ...(data.game_state.profile || {}),
+          },
+        });
+      } else {
+        console.log(
+          "No saved progress found. Creating new progress."
+        );
+
+        setState({
+          ...INITIAL_STATE,
+
+          profile: {
+            ...INITIAL_STATE.profile,
+
+            name:
+              currentUser.name ||
+              "LearnX User",
+
+            email:
+              currentUser.email ||
+              "",
+
+            studentId:
+              currentUser.studentId ||
+              "NEXA-001",
+
+            role:
+              currentUser.role ||
+              "Aspiring Developer",
+
+            avatarInitials:
+              (currentUser.name || "LU")
+                .split(" ")
+                .map((p) => p[0])
+                .join("")
+                .toUpperCase()
+                .slice(0, 2),
+          },
+        });
+      }
+
+      // Only start saving AFTER loading is finished.
+      hydratedUserId.current = currentUser.id;
+    };
+
+    loadGameState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser]);
+
+  // -----------------------------
+  // KEEP SOUND ENGINE IN SYNC
+  // -----------------------------
+
   useEffect(() => {
     soundEngine.enabled = state.soundEnabled;
   }, [state.soundEnabled]);
 
-  // Persist game state to localStorage
+  // -----------------------------
+  // SAVE GAME STATE TO SUPABASE
+  // -----------------------------
+
+  useEffect(() => {
+    if (!currentUser?.id) {
+      return;
+    }
+
+    // Don't save until this user's data
+    // has finished loading.
+    if (hydratedUserId.current !== currentUser.id) {
+      return;
+    }
+
+    // Clear previous pending save.
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+    }
+
+    // Small delay so multiple quick state changes
+    // don't create many database requests.
+    saveTimer.current = setTimeout(async () => {
+      const { error } = await supabase
+        .from("game_progress")
+        .upsert(
+          {
+            user_id: currentUser.id,
+            game_state: state,
+            updated_at: new Date().toISOString(),
+          },
+          {
+            onConflict: "user_id",
+          }
+        );
+
+      if (error) {
+        console.error(
+          "Failed to save game progress:",
+          error
+        );
+      } else {
+        console.log(
+          "LearnX progress saved to Supabase."
+        );
+      }
+    }, 500);
+
+    return () => {
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+      }
+    };
+  }, [state, currentUser]);
+
+  // -----------------------------
+  // LOCAL BACKUP
+  // -----------------------------
+
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(state)
+      );
     } catch (e) {
-      console.warn("Failed to write to localStorage", e);
+      console.warn(
+        "Failed to write local backup:",
+        e
+      );
     }
   }, [state]);
 
-  // Sync profile when currentUser changes
+  // -----------------------------
+  // SYNC PROFILE
+  // -----------------------------
+
   useEffect(() => {
     if (currentUser && currentUser.name) {
-      const initials = currentUser.name
-        .split(" ")
-        .map(p => p[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2) || "AL";
+      const initials =
+        currentUser.name
+          .split(" ")
+          .map((p) => p[0])
+          .join("")
+          .toUpperCase()
+          .slice(0, 2) || "AL";
 
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
+
         profile: {
           ...prev.profile,
           name: currentUser.name,
           email: currentUser.email,
-          studentId: currentUser.studentId || prev.profile.studentId,
-          avatarInitials: initials
-        }
+          studentId:
+            currentUser.studentId ||
+            prev.profile.studentId,
+          role:
+            currentUser.role ||
+            prev.profile.role,
+          avatarInitials: initials,
+        },
       }));
     }
   }, [currentUser]);
 
-  // Authentication Methods
-  const login = (email, password) => {
-    const cleanEmail = (email || "").trim().toLowerCase();
+  // -----------------------------
+  // LOGIN - SUPABASE
+  // -----------------------------
+
+  const login = async (email, password) => {
+    const cleanEmail = (email || "")
+      .trim()
+      .toLowerCase();
+
     const cleanPass = (password || "").trim();
 
-    try {
-      const usersJson = localStorage.getItem(USERS_DB_KEY);
-      const users = usersJson ? JSON.parse(usersJson) : DEFAULT_USERS;
-
-      // Check against registered users or fallback demo
-      let user = users[cleanEmail];
-      if (!user && cleanEmail === "alex@nexa.dev" && cleanPass === "python123") {
-        user = DEFAULT_USERS["alex@nexa.dev"];
-      }
-
-      if (user && user.password === cleanPass) {
-        const sessionData = {
-          name: user.name,
-          email: user.email,
-          role: user.role || "Aspiring Developer",
-          studentId: user.studentId || "NEXA-001"
-        };
-        localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(sessionData));
-        setCurrentUser(sessionData);
-        setIsAuthenticated(true);
-        soundEngine.playClick();
-        return { success: true };
-      }
-    } catch (e) {
-      console.warn("Login error", e);
+    if (!cleanEmail || !cleanPass) {
+      return {
+        success: false,
+        error: "Please enter email and password.",
+      };
     }
 
-    return {
-      success: false,
-      error: "Invalid email or password. (Hint: demo is alex@nexa.dev / python123)"
-    };
-  };
-
-  const signup = ({ name, email, password }) => {
-    const cleanName = (name || "").trim();
-    const cleanEmail = (email || "").trim().toLowerCase();
-    const cleanPass = (password || "").trim();
-
-    if (!cleanName) return { success: false, error: "Please enter your name." };
-    if (!cleanEmail.includes("@")) return { success: false, error: "Please enter a valid email address." };
-    if (cleanPass.length < 6) return { success: false, error: "Password must be at least 6 characters." };
-
     try {
-      const usersJson = localStorage.getItem(USERS_DB_KEY);
-      const users = usersJson ? JSON.parse(usersJson) : { ...DEFAULT_USERS };
+      const { data, error } =
+        await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password: cleanPass,
+        });
 
-      if (users[cleanEmail]) {
-        return { success: false, error: "An account with this email already exists." };
+      if (error) {
+        return {
+          success: false,
+          error: error.message,
+        };
       }
 
-      const newUser = {
-        name: cleanName,
-        email: cleanEmail,
-        password: cleanPass,
-        role: "Aspiring Developer",
-        studentId: `NEXA-${Math.floor(100 + Math.random() * 900)}`
-      };
+      if (!data.user) {
+        return {
+          success: false,
+          error: "Login failed. Please try again.",
+        };
+      }
 
-      users[cleanEmail] = newUser;
-      localStorage.setItem(USERS_DB_KEY, JSON.stringify(users));
+      const user = data.user;
 
       const sessionData = {
-        name: newUser.name,
-        email: newUser.email,
-        role: newUser.role,
-        studentId: newUser.studentId
+        id: user.id,
+        name:
+          user.user_metadata?.name ||
+          "LearnX User",
+        email: user.email,
+        role:
+          user.user_metadata?.role ||
+          "Aspiring Developer",
+        studentId:
+          user.user_metadata?.studentId || "",
       };
 
-      localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(sessionData));
       setCurrentUser(sessionData);
       setIsAuthenticated(true);
-      soundEngine.playVictory();
 
-      return { success: true };
+      soundEngine.playClick();
+
+      return {
+        success: true,
+      };
     } catch (e) {
-      return { success: false, error: "Signup failed due to storage error." };
+      console.error("Login error:", e);
+
+      return {
+        success: false,
+        error:
+          "Something went wrong during login.",
+      };
     }
   };
 
-  const logout = () => {
-    soundEngine.playClick();
+  // -----------------------------
+  // SIGNUP - SUPABASE
+  // -----------------------------
+
+  const signup = async ({
+    name,
+    email,
+    password,
+  }) => {
+    const cleanName = (name || "").trim();
+
+    const cleanEmail = (email || "")
+      .trim()
+      .toLowerCase();
+
+    const cleanPass = (password || "").trim();
+
+    if (!cleanName) {
+      return {
+        success: false,
+        error: "Please enter your name.",
+      };
+    }
+
+    if (!cleanEmail.includes("@")) {
+      return {
+        success: false,
+        error:
+          "Please enter a valid email address.",
+      };
+    }
+
+    if (cleanPass.length < 6) {
+      return {
+        success: false,
+        error:
+          "Password must be at least 6 characters.",
+      };
+    }
+
     try {
-      localStorage.removeItem(AUTH_SESSION_KEY);
-    } catch {}
+      const studentId = `NEXA-${Math.floor(
+        100 + Math.random() * 900
+      )}`;
+
+      const { data, error } =
+        await supabase.auth.signUp({
+          email: cleanEmail,
+          password: cleanPass,
+
+          options: {
+            data: {
+              name: cleanName,
+              role: "Aspiring Developer",
+              studentId: studentId,
+            },
+          },
+        });
+
+      if (error) {
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+
+      if (data.user && data.session) {
+        const sessionData = {
+          id: data.user.id,
+          name: cleanName,
+          email: cleanEmail,
+          role: "Aspiring Developer",
+          studentId: studentId,
+        };
+
+        setCurrentUser(sessionData);
+        setIsAuthenticated(true);
+
+        soundEngine.playVictory();
+
+        return {
+          success: true,
+        };
+      }
+
+      return {
+        success: true,
+        message:
+          "Account created! Please check your email to confirm your account.",
+      };
+    } catch (e) {
+      console.error("Signup error:", e);
+
+      return {
+        success: false,
+        error:
+          "Something went wrong during signup.",
+      };
+    }
+  };
+
+  // -----------------------------
+  // LOGOUT
+  // -----------------------------
+
+  const logout = async () => {
+    soundEngine.playClick();
+
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.warn("Logout error:", e);
+    }
+
+    hydratedUserId.current = null;
+
     setCurrentUser(null);
     setIsAuthenticated(false);
-    setState(prev => ({ ...prev, activeView: "dashboard" }));
+    setState(INITIAL_STATE);
   };
 
-  const navigateTo = (view, missionId = null) => {
+  // -----------------------------
+  // NAVIGATION
+  // -----------------------------
+
+  const navigateTo = (
+    view,
+    missionId = null
+  ) => {
     soundEngine.playClick();
-    setState(prev => ({
+
+    setState((prev) => ({
       ...prev,
+
       activeView: view,
-      ...(missionId ? { currentMissionId: missionId } : {})
+
+      ...(missionId
+        ? {
+            currentMissionId: missionId,
+          }
+        : {}),
     }));
   };
+
+  // -----------------------------
+  // SELECT MISSION
+  // -----------------------------
 
   const selectMission = (missionId) => {
-    setState(prev => ({
+    setState((prev) => ({
       ...prev,
-      currentMissionId: missionId
+      currentMissionId: missionId,
     }));
   };
+
+  // -----------------------------
+  // FILTER BIOME
+  // -----------------------------
 
   const setFilterBiome = (biomeKey) => {
     soundEngine.playClick();
-    setState(prev => ({ ...prev, filterBiome: biomeKey }));
+
+    setState((prev) => ({
+      ...prev,
+      filterBiome: biomeKey,
+    }));
   };
 
+  // -----------------------------
+  // SOUND
+  // -----------------------------
+
   const toggleSound = () => {
-    setState(prev => {
+    setState((prev) => {
       const nextVal = !prev.soundEnabled;
+
       soundEngine.enabled = nextVal;
-      if (nextVal) soundEngine.playClick();
-      return { ...prev, soundEnabled: nextVal };
+
+      if (nextVal) {
+        soundEngine.playClick();
+      }
+
+      return {
+        ...prev,
+        soundEnabled: nextVal,
+      };
     });
   };
 
-  const updateProfile = ({ name, studentId }) => {
-    const initials = (name || "Alex")
-      .split(" ")
-      .map(p => p[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2) || "AL";
+  // -----------------------------
+  // UPDATE PROFILE
+  // -----------------------------
 
-    setState(prev => ({
+  const updateProfile = ({
+    name,
+    studentId,
+  }) => {
+    const cleanName =
+      (name || "").trim() || "Alex";
+
+    const cleanStudentId =
+      (studentId || "").trim() ||
+      "NEXA-001";
+
+    const initials =
+      cleanName
+        .split(" ")
+        .map((p) => p[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2) || "AL";
+
+    setState((prev) => ({
       ...prev,
+
       profile: {
         ...prev.profile,
-        name: name.trim() || "Alex",
-        studentId: studentId.trim() || "NEXA-001",
-        avatarInitials: initials
-      }
+        name: cleanName,
+        studentId: cleanStudentId,
+        avatarInitials: initials,
+      },
     }));
 
-    // Also update session user
     if (currentUser) {
-      const updatedUser = { ...currentUser, name: name.trim() || "Alex", studentId: studentId.trim() || "NEXA-001" };
+      const updatedUser = {
+        ...currentUser,
+        name: cleanName,
+        studentId: cleanStudentId,
+      };
+
       setCurrentUser(updatedUser);
-      try {
-        localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(updatedUser));
-      } catch {}
+
+      supabase.auth
+        .updateUser({
+          data: {
+            name: cleanName,
+            studentId: cleanStudentId,
+          },
+        })
+        .catch((error) => {
+          console.warn(
+            "Failed to update Supabase profile:",
+            error
+          );
+        });
     }
   };
 
-  const completeMission = (missionId, rewardXP, badgeObj) => {
-    const mission = LEVELS_DATA.find(m => m.level === missionId);
-    const today = new Date().toISOString().split("T")[0];
+  // -----------------------------
+  // COMPLETE MISSION
+  // -----------------------------
 
-    setState(prev => {
-      const alreadyCompleted = prev.completedMissions.includes(missionId);
+  const completeMission = (
+    missionId,
+    rewardXP,
+    badgeObj
+  ) => {
+    const mission = LEVELS_DATA.find(
+      (m) => m.level === missionId
+    );
+
+    const today = new Date()
+      .toISOString()
+      .split("T")[0];
+
+    setState((prev) => {
+      const alreadyCompleted =
+        prev.completedMissions.includes(
+          missionId
+        );
+
       const newCompleted = alreadyCompleted
         ? prev.completedMissions
-        : [...prev.completedMissions, missionId];
+        : [
+            ...prev.completedMissions,
+            missionId,
+          ];
 
-      const newXP = alreadyCompleted ? prev.xp : prev.xp + rewardXP;
+      const newXP = alreadyCompleted
+        ? prev.xp
+        : prev.xp + rewardXP;
 
       let newBadges = [...prev.badges];
-      let newBadgeDates = { ...prev.badgeDates };
 
-      if (badgeObj && !newBadges.includes(badgeObj.id)) {
+      let newBadgeDates = {
+        ...prev.badgeDates,
+      };
+
+      if (
+        badgeObj &&
+        !newBadges.includes(badgeObj.id)
+      ) {
         newBadges.push(badgeObj.id);
         newBadgeDates[badgeObj.id] = today;
       }
@@ -303,48 +729,96 @@ export function GameStateProvider({ children }) {
             ...prev.expeditionLog,
             {
               id: missionId,
-              title: mission?.title || `Mission ${missionId}`,
+              title:
+                mission?.title ||
+                `Mission ${missionId}`,
               date: today,
-              xp: rewardXP
-            }
+              xp: rewardXP,
+            },
           ];
 
-      // Next unlockable mission
-      const nextMissionId = Math.min(8, missionId + 1);
+      const nextMissionId = Math.min(
+        8,
+        missionId + 1
+      );
 
       return {
         ...prev,
+
         completedMissions: newCompleted,
         xp: newXP,
         badges: newBadges,
         badgeDates: newBadgeDates,
         expeditionLog: newLog,
-        currentMissionId: nextMissionId
+        currentMissionId: nextMissionId,
       };
     });
   };
 
+  // -----------------------------
+  // RESET PROGRESS
+  // -----------------------------
+
   const resetProgress = () => {
     soundEngine.playClick();
-    setState(INITIAL_STATE);
+
+    setState({
+      ...INITIAL_STATE,
+
+      profile: {
+        ...INITIAL_STATE.profile,
+
+        name:
+          currentUser?.name ||
+          INITIAL_STATE.profile.name,
+
+        email:
+          currentUser?.email ||
+          INITIAL_STATE.profile.email,
+
+        studentId:
+          currentUser?.studentId ||
+          INITIAL_STATE.profile.studentId,
+
+        role:
+          currentUser?.role ||
+          INITIAL_STATE.profile.role,
+
+        avatarInitials:
+          currentUser?.name
+            ?.split(" ")
+            .map((p) => p[0])
+            .join("")
+            .toUpperCase()
+            .slice(0, 2) ||
+          INITIAL_STATE.profile.avatarInitials,
+      },
+    });
   };
+
+  // -----------------------------
+  // PROVIDER
+  // -----------------------------
 
   return (
     <GameStateContext.Provider
       value={{
         ...state,
+
         isAuthenticated,
         currentUser,
+
         login,
         signup,
         logout,
+
         navigateTo,
         selectMission,
         setFilterBiome,
         toggleSound,
         updateProfile,
         completeMission,
-        resetProgress
+        resetProgress,
       }}
     >
       {children}
@@ -354,6 +828,12 @@ export function GameStateProvider({ children }) {
 
 export function useGameState() {
   const ctx = useContext(GameStateContext);
-  if (!ctx) throw new Error("useGameState must be used within GameStateProvider");
+
+  if (!ctx) {
+    throw new Error(
+      "useGameState must be used within GameStateProvider"
+    );
+  }
+
   return ctx;
 }

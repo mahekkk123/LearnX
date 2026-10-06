@@ -1,13 +1,27 @@
 import React, { useState } from "react";
-import { BookOpen, Eye, EyeOff, ArrowRight, Sparkles, AlertCircle, CheckCircle2, User, Mail, Lock, ShieldCheck } from "lucide-react";
+import {
+  BookOpen,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  Sparkles,
+  AlertCircle,
+  User,
+  Mail,
+  Lock,
+  ShieldCheck,
+} from "lucide-react";
 import { useGameState } from "../context/GameStateContext";
-import { NovaMascot, OceanReefArt } from "../components/BiomeVectorArt";
+import {
+  NovaMascot,
+  OceanReefArt,
+} from "../components/BiomeVectorArt";
 import { soundEngine } from "../utils/audio";
 
 export function AuthView() {
   const { login, signup } = useGameState();
 
-  const [mode, setMode] = useState("login"); // "login" | "signup"
+  const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -21,6 +35,7 @@ export function AuthView() {
     soundEngine.playClick();
     setMode(newMode);
     setErrorMsg("");
+    setIsLoading(false);
   };
 
   const handleDemoFill = () => {
@@ -29,6 +44,10 @@ export function AuthView() {
     setPassword("python123");
     setErrorMsg("");
   };
+
+  // ============================================================
+  // LOGIN
+  // ============================================================
 
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
@@ -39,6 +58,7 @@ export function AuthView() {
       soundEngine.playIncorrect();
       return;
     }
+
     if (!password) {
       setErrorMsg("Please enter your password.");
       soundEngine.playIncorrect();
@@ -46,16 +66,31 @@ export function AuthView() {
     }
 
     setIsLoading(true);
-    // Simulate brief smooth response
-    setTimeout(() => {
-      const res = login(email, password);
+
+    try {
+      const res = await login(email, password);
+
       if (!res.success) {
         setErrorMsg(res.error || "Invalid credentials.");
         soundEngine.playIncorrect();
         setIsLoading(false);
+        return;
       }
-    }, 250);
+
+      // Successful login
+      setIsLoading(false);
+    } catch (error) {
+      console.error("Login error:", error);
+
+      setErrorMsg("Something went wrong during login.");
+      soundEngine.playIncorrect();
+      setIsLoading(false);
+    }
   };
+
+  // ============================================================
+  // SIGN UP
+  // ============================================================
 
   const handleSignupSubmit = async (e) => {
     e.preventDefault();
@@ -66,16 +101,19 @@ export function AuthView() {
       soundEngine.playIncorrect();
       return;
     }
+
     if (!email.trim() || !email.includes("@")) {
       setErrorMsg("Please enter a valid email address.");
       soundEngine.playIncorrect();
       return;
     }
+
     if (password.length < 6) {
       setErrorMsg("Password must be at least 6 characters long.");
       soundEngine.playIncorrect();
       return;
     }
+
     if (password !== confirmPassword) {
       setErrorMsg("Passwords do not match. Please re-check.");
       soundEngine.playIncorrect();
@@ -83,32 +121,69 @@ export function AuthView() {
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      const res = signup({ name, email, password });
+
+    try {
+      const res = await signup({
+        name,
+        email,
+        password,
+      });
+
       if (!res.success) {
         setErrorMsg(res.error || "Signup failed.");
         soundEngine.playIncorrect();
         setIsLoading(false);
+        return;
       }
-    }, 250);
+
+      // If email confirmation is required,
+      // show the message instead of keeping loading forever.
+      if (res.message) {
+        setErrorMsg(res.message);
+        setIsLoading(false);
+        return;
+      }
+
+      // Successful signup
+      setIsLoading(false);
+    } catch (error) {
+      console.error("Signup error:", error);
+
+      setErrorMsg("Something went wrong during signup.");
+      soundEngine.playIncorrect();
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-[#F8F9F5] flex flex-col justify-between items-center p-4 sm:p-6 select-none relative overflow-hidden">
-      {/* Decorative ambient pastel glows matching cozy RPG theme */}
+
+      {/* Decorative ambient pastel glows */}
       <div className="absolute -top-32 -left-32 w-96 h-96 bg-[#E3F3F1] rounded-full blur-3xl opacity-70 pointer-events-none" />
+
       <div className="absolute top-1/3 -right-32 w-96 h-96 bg-[#FEF8EC] rounded-full blur-3xl opacity-70 pointer-events-none" />
+
       <div className="absolute -bottom-32 left-1/3 w-96 h-96 bg-[#E8F5EE] rounded-full blur-3xl opacity-70 pointer-events-none" />
 
-      {/* Top Header Logo */}
+      {/* ========================================================
+          HEADER
+      ======================================================== */}
+
       <header className="w-full max-w-md flex items-center justify-between py-4 z-10">
         <div className="flex items-center gap-3">
+
           <div className="w-10 h-10 rounded-2xl bg-[#2A6B53] flex items-center justify-center text-white shadow-soft">
             <BookOpen className="w-5 h-5" />
           </div>
+
           <div>
-            <span className="text-2xl font-extrabold tracking-tight text-[#172E26]">LearnX</span>
-            <span className="text-xs block font-semibold text-[#65756B] -mt-1">Python Expedition</span>
+            <span className="text-2xl font-extrabold tracking-tight text-[#172E26]">
+              LearnX
+            </span>
+
+            <span className="text-xs block font-semibold text-[#65756B] -mt-1">
+              Python Expedition
+            </span>
           </div>
         </div>
 
@@ -117,26 +192,42 @@ export function AuthView() {
         </span>
       </header>
 
-      {/* Main Authentication Card */}
+      {/* ========================================================
+          MAIN AUTH CARD
+      ======================================================== */}
+
       <main className="w-full max-w-md z-10 my-auto">
+
         <div className="bg-[#FFFFFF] border border-[#E4ECE4] rounded-3xl p-6 sm:p-8 shadow-float relative space-y-6">
-          {/* NOVA Companion greeting banner */}
+
+          {/* NOVA MESSAGE */}
+
           <div className="bg-[#EFF7F2] border border-[#D5EADB] rounded-2xl p-4 flex items-start gap-3.5">
-            <NovaMascot size={44} className="flex-shrink-0" />
+
+            <NovaMascot
+              size={44}
+              className="flex-shrink-0"
+            />
+
             <div className="space-y-0.5">
+
               <div className="text-[10px] font-bold tracking-widest text-[#2A6B53] uppercase">
                 NOVA · System Reception
               </div>
+
               <p className="text-xs text-[#3E5C4E] leading-relaxed italic">
                 {mode === "login"
                   ? "“Welcome back, Explorer! The core terminals in Undersea Reef await your Python code.”"
                   : "“Welcome to NEXA! Register your explorer credentials and let's bring the biomes back to life.”"}
               </p>
+
             </div>
           </div>
 
-          {/* Mode Switcher Tabs */}
+          {/* MODE SWITCHER */}
+
           <div className="flex bg-[#F3F6F3] p-1.5 rounded-2xl border border-[#E5EDE6]">
+
             <button
               type="button"
               onClick={() => switchMode("login")}
@@ -148,6 +239,7 @@ export function AuthView() {
             >
               Log In
             </button>
+
             <button
               type="button"
               onClick={() => switchMode("signup")}
@@ -159,28 +251,49 @@ export function AuthView() {
             >
               Sign Up
             </button>
+
           </div>
 
-          {/* Error Alert Box */}
+          {/* ERROR / INFO MESSAGE */}
+
           {errorMsg && (
             <div className="bg-[#FDF2F0] border border-[#F7C6BF] text-[#8C2E21] text-xs font-medium p-3.5 rounded-2xl flex items-start gap-2.5 animate-fadeIn">
+
               <AlertCircle className="w-4 h-4 text-[#DD4A35] flex-shrink-0 mt-0.5" />
+
               <span>{errorMsg}</span>
+
             </div>
           )}
 
-          {/* ======================================================== */}
-          {/* LOGIN FORM */}
-          {/* ======================================================== */}
+          {/* ========================================================
+              LOGIN FORM
+          ======================================================== */}
+
           {mode === "login" && (
-            <form onSubmit={handleLoginSubmit} className="space-y-4">
+            <form
+              onSubmit={handleLoginSubmit}
+              className="space-y-4"
+            >
+
+              {/* EMAIL */}
+
               <div className="space-y-1.5">
+
                 <label className="text-xs font-bold text-[#4B6256] flex items-center justify-between">
+
                   <span>Email address</span>
-                  <span className="text-[11px] font-normal text-[#7E9387]">alex@nexa.dev</span>
+
+                  <span className="text-[11px] font-normal text-[#7E9387]">
+                    alex@nexa.dev
+                  </span>
+
                 </label>
+
                 <div className="relative">
+
                   <Mail className="w-4 h-4 text-[#8C9E93] absolute left-3.5 top-3.5 pointer-events-none" />
+
                   <input
                     type="email"
                     value={email}
@@ -189,16 +302,28 @@ export function AuthView() {
                     required
                     className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-[#F8FAF8] border border-[#E2EAE3] text-xs sm:text-sm text-[#172E26] font-medium focus:outline-none focus:ring-2 focus:ring-[#2A6B53] focus:bg-white transition-all"
                   />
+
                 </div>
               </div>
 
+              {/* PASSWORD */}
+
               <div className="space-y-1.5">
+
                 <label className="text-xs font-bold text-[#4B6256] flex items-center justify-between">
+
                   <span>Password</span>
-                  <span className="text-[11px] font-normal text-[#7E9387]">python123</span>
+
+                  <span className="text-[11px] font-normal text-[#7E9387]">
+                    python123
+                  </span>
+
                 </label>
+
                 <div className="relative">
+
                   <Lock className="w-4 h-4 text-[#8C9E93] absolute left-3.5 top-3.5 pointer-events-none" />
+
                   <input
                     type={showPassword ? "text" : "password"}
                     value={password}
@@ -207,37 +332,66 @@ export function AuthView() {
                     required
                     className="w-full pl-10 pr-10 py-2.5 rounded-2xl bg-[#F8FAF8] border border-[#E2EAE3] text-xs sm:text-sm text-[#172E26] font-medium focus:outline-none focus:ring-2 focus:ring-[#2A6B53] focus:bg-white transition-all"
                   />
+
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
+                    onClick={() =>
+                      setShowPassword(!showPassword)
+                    }
                     className="absolute right-3 top-3 text-[#8C9E93] hover:text-[#172E26] transition-colors"
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
                   </button>
+
                 </div>
               </div>
 
-              {/* Demo Quick Fill Button */}
+              {/* DEMO BUTTON */}
+
               <button
                 type="button"
                 onClick={handleDemoFill}
                 className="w-full py-2 px-3 rounded-xl bg-[#F3F8F5] hover:bg-[#E7F2EB] text-[#2A6B53] font-bold text-[11px] border border-[#D5EADB] transition-colors flex items-center justify-center gap-1.5"
               >
+
                 <Sparkles className="w-3.5 h-3.5 text-[#E8A856]" />
-                <span>One-Click Demo Login (Alex)</span>
+
+                <span>
+                  One-Click Demo Login (Alex)
+                </span>
+
               </button>
+
+              {/* LOGIN BUTTON */}
 
               <button
                 type="submit"
                 disabled={isLoading}
                 className="w-full py-3.5 px-6 rounded-2xl bg-[#2A6B53] hover:bg-[#205541] active:scale-[0.98] text-white font-bold text-xs sm:text-sm shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-60"
               >
-                <span>{isLoading ? "Authenticating..." : "Log In to Expedition"}</span>
+
+                <span>
+                  {isLoading
+                    ? "Authenticating..."
+                    : "Log In to Expedition"}
+                </span>
+
                 <ArrowRight className="w-4 h-4" />
+
               </button>
 
+              {/* SWITCH TO SIGNUP */}
+
               <div className="text-center pt-2">
-                <span className="text-xs text-[#6B7F74]">Don't have an account? </span>
+
+                <span className="text-xs text-[#6B7F74]">
+                  Don't have an account?{" "}
+                </span>
+
                 <button
                   type="button"
                   onClick={() => switchMode("signup")}
@@ -245,19 +399,34 @@ export function AuthView() {
                 >
                   Sign Up
                 </button>
+
               </div>
+
             </form>
           )}
 
-          {/* ======================================================== */}
-          {/* SIGN UP FORM */}
-          {/* ======================================================== */}
+          {/* ========================================================
+              SIGN UP FORM
+          ======================================================== */}
+
           {mode === "signup" && (
-            <form onSubmit={handleSignupSubmit} className="space-y-3.5">
+            <form
+              onSubmit={handleSignupSubmit}
+              className="space-y-3.5"
+            >
+
+              {/* NAME */}
+
               <div className="space-y-1">
-                <label className="text-xs font-bold text-[#4B6256]">Explorer Name</label>
+
+                <label className="text-xs font-bold text-[#4B6256]">
+                  Explorer Name
+                </label>
+
                 <div className="relative">
+
                   <User className="w-4 h-4 text-[#8C9E93] absolute left-3.5 top-3.5 pointer-events-none" />
+
                   <input
                     type="text"
                     value={name}
@@ -266,13 +435,22 @@ export function AuthView() {
                     required
                     className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-[#F8FAF8] border border-[#E2EAE3] text-xs sm:text-sm text-[#172E26] font-medium focus:outline-none focus:ring-2 focus:ring-[#2A6B53] focus:bg-white transition-all"
                   />
+
                 </div>
               </div>
 
+              {/* EMAIL */}
+
               <div className="space-y-1">
-                <label className="text-xs font-bold text-[#4B6256]">Email address</label>
+
+                <label className="text-xs font-bold text-[#4B6256]">
+                  Email address
+                </label>
+
                 <div className="relative">
+
                   <Mail className="w-4 h-4 text-[#8C9E93] absolute left-3.5 top-3.5 pointer-events-none" />
+
                   <input
                     type="email"
                     value={email}
@@ -281,13 +459,22 @@ export function AuthView() {
                     required
                     className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-[#F8FAF8] border border-[#E2EAE3] text-xs sm:text-sm text-[#172E26] font-medium focus:outline-none focus:ring-2 focus:ring-[#2A6B53] focus:bg-white transition-all"
                   />
+
                 </div>
               </div>
 
+              {/* PASSWORD */}
+
               <div className="space-y-1">
-                <label className="text-xs font-bold text-[#4B6256]">Password</label>
+
+                <label className="text-xs font-bold text-[#4B6256]">
+                  Password
+                </label>
+
                 <div className="relative">
+
                   <Lock className="w-4 h-4 text-[#8C9E93] absolute left-3.5 top-3.5 pointer-events-none" />
+
                   <input
                     type={showPassword ? "text" : "password"}
                     value={password}
@@ -296,49 +483,96 @@ export function AuthView() {
                     required
                     className="w-full pl-10 pr-10 py-2.5 rounded-2xl bg-[#F8FAF8] border border-[#E2EAE3] text-xs sm:text-sm text-[#172E26] font-medium focus:outline-none focus:ring-2 focus:ring-[#2A6B53] focus:bg-white transition-all"
                   />
+
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
+                    onClick={() =>
+                      setShowPassword(!showPassword)
+                    }
                     className="absolute right-3 top-3 text-[#8C9E93] hover:text-[#172E26] transition-colors"
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
                   </button>
+
                 </div>
               </div>
 
+              {/* CONFIRM PASSWORD */}
+
               <div className="space-y-1">
-                <label className="text-xs font-bold text-[#4B6256]">Confirm Password</label>
+
+                <label className="text-xs font-bold text-[#4B6256]">
+                  Confirm Password
+                </label>
+
                 <div className="relative">
+
                   <Lock className="w-4 h-4 text-[#8C9E93] absolute left-3.5 top-3.5 pointer-events-none" />
+
                   <input
-                    type={showConfirmPassword ? "text" : "password"}
+                    type={
+                      showConfirmPassword
+                        ? "text"
+                        : "password"
+                    }
                     value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    onChange={(e) =>
+                      setConfirmPassword(e.target.value)
+                    }
                     placeholder="Confirm password"
                     required
                     className="w-full pl-10 pr-10 py-2.5 rounded-2xl bg-[#F8FAF8] border border-[#E2EAE3] text-xs sm:text-sm text-[#172E26] font-medium focus:outline-none focus:ring-2 focus:ring-[#2A6B53] focus:bg-white transition-all"
                   />
+
                   <button
                     type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    onClick={() =>
+                      setShowConfirmPassword(
+                        !showConfirmPassword
+                      )
+                    }
                     className="absolute right-3 top-3 text-[#8C9E93] hover:text-[#172E26] transition-colors"
                   >
-                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {showConfirmPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
                   </button>
+
                 </div>
               </div>
+
+              {/* SIGNUP BUTTON */}
 
               <button
                 type="submit"
                 disabled={isLoading}
                 className="w-full py-3.5 px-6 rounded-2xl bg-[#2A6B53] hover:bg-[#205541] active:scale-[0.98] text-white font-bold text-xs sm:text-sm shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-60"
               >
-                <span>{isLoading ? "Creating Account..." : "Create Explorer Account"}</span>
+
+                <span>
+                  {isLoading
+                    ? "Creating Account..."
+                    : "Create Explorer Account"}
+                </span>
+
                 <ArrowRight className="w-4 h-4" />
+
               </button>
 
+              {/* SWITCH TO LOGIN */}
+
               <div className="text-center pt-2">
-                <span className="text-xs text-[#6B7F74]">Already have an account? </span>
+
+                <span className="text-xs text-[#6B7F74]">
+                  Already have an account?{" "}
+                </span>
+
                 <button
                   type="button"
                   onClick={() => switchMode("login")}
@@ -346,22 +580,37 @@ export function AuthView() {
                 >
                   Log In
                 </button>
+
               </div>
+
             </form>
           )}
+
         </div>
       </main>
 
-      {/* Footer info */}
+      {/* ========================================================
+          FOOTER
+      ======================================================== */}
+
       <footer className="w-full max-w-md text-center py-4 z-10 space-y-1">
+
         <div className="flex items-center justify-center gap-1.5 text-[11px] font-semibold text-[#7E9387]">
+
           <ShieldCheck className="w-3.5 h-3.5 text-[#2A6B53]" />
-          <span>Local demo session stored securely in browser</span>
+
+          <span>
+            Secure authentication powered by Supabase
+          </span>
+
         </div>
+
         <p className="text-[10px] text-[#9FB0A5]">
           6 Environmental Biomes · 18 Python Missions · Bloom's Taxonomy Framework
         </p>
+
       </footer>
+
     </div>
   );
 }
