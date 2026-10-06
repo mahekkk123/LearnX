@@ -18,6 +18,15 @@ export const BADGES_DATA = [
     bg: "#EBF3FB"
   },
   {
+    id: "terminal_whisperer",
+    name: "Terminal Whisperer",
+    icon: "🌲",
+    missionId: 3,
+    description: "Interactive user input. Complete mission 3: user terminal.",
+    color: "#2D6A4F",
+    bg: "#E8F5E9"
+  },
+  {
     id: "security_rookie",
     name: "Security Rookie",
     icon: "🛡️",
@@ -25,6 +34,15 @@ export const BADGES_DATA = [
     description: "Build conditional checks. Complete mission 4: security gate.",
     color: "#2D6A4F",
     bg: "#E8F5E9"
+  },
+  {
+    id: "loop_pioneer",
+    name: "Loop Pioneer",
+    icon: "🔁",
+    missionId: 5,
+    description: "Automate repeating tasks. Complete mission 5: automation.",
+    color: "#C98B4B",
+    bg: "#FEF8EE"
   },
   {
     id: "data_wrangler",
@@ -52,5 +70,41 @@ export const BADGES_DATA = [
     description: "Handle system exceptions. Complete mission 8: error detector.",
     color: "#5E6B7A",
     bg: "#EEF2F7"
+  },
+  {
+    id: "system_architect",
+    name: "System Architect",
+    icon: "🏙️",
+    missionId: 9,
+    description: "Map urban data with dictionaries. Complete mission 9: grid architecture.",
+    color: "#DD6245",
+    bg: "#FDF1ED"
+  },
+  {
+    id: "algorithmic_master",
+    name: "Algorithmic Master",
+    icon: "🚦",
+    missionId: 10,
+    description: "Filter and transform city streams. Complete mission 10: algorithmic routing.",
+    color: "#DD6245",
+    bg: "#FDF1ED"
+  },
+  {
+    id: "object_pioneer",
+    name: "Object Pioneer",
+    icon: "❄️",
+    missionId: 11,
+    description: "Architect Object-Oriented systems. Complete mission 11: quantum synthesis.",
+    color: "#3F819A",
+    bg: "#EAF5F9"
+  },
+  {
+    id: "nexa_savior",
+    name: "NEXA Savior Capstone",
+    icon: "👑",
+    missionId: 12,
+    description: "Build the autonomous restoration engine. Complete Level 12 Capstone Project!",
+    color: "#2A6B53",
+    bg: "#EAF5EE"
   }
 ];

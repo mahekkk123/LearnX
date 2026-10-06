@@ -30,7 +30,7 @@ function MainContent() {
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden bg-[#F8F9F5]">
+    <div className="flex-1 ml-64 flex flex-col min-h-screen overflow-x-hidden bg-[#F8F9F5]">
       <TopHeader />
       <main className="flex-1 pb-16">
         {renderView()}

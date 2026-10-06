@@ -738,7 +738,7 @@ export function GameStateProvider({ children }) {
           ];
 
       const nextMissionId = Math.min(
-        8,
+        12,
         missionId + 1
       );
 
