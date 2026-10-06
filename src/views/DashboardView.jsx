@@ -86,7 +86,7 @@ export function DashboardView() {
                 <Award className="w-4 h-4" />
               </div>
               <div className="text-3xl font-black text-[#172E26] tracking-tight">
-                {badges.length} <span className="text-lg font-bold text-[#6E8076]">/ 6</span>
+                {badges.length} <span className="text-lg font-bold text-[#6E8076]">/ {BADGES_DATA.length}</span>
               </div>
               <div className="text-xs font-semibold text-[#6E8076] mt-0.5">Badges collected</div>
             </div>

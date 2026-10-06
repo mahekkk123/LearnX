@@ -1,8 +1,9 @@
 /**
  * Dual-Mode Python Runner for LearnX:
  * 1. Native Pyodide WebAssembly (when network is available)
- * 2. Instant embedded Python runtime for Levels 1-8 constructs
- * (print, input, variables, conditionals, for/range, lists, functions, try/except)
+ * 2. Instant embedded Python runtime for Levels 1-12 constructs
+ * (print, input, variables, conditionals, for/range, for/in, lists, dicts,
+ *  list comprehensions, functions, try/except, classes & objects)
  */
 
 let pyodideInstance = null;
@@ -50,7 +51,7 @@ if (typeof window !== "undefined") {
  * @returns {Promise<{ output: string, error: string | null, isSuccess: boolean }>}
  */
 export async function runPythonCode(code, onInputRequest) {
-  // If Pyodide is ready and no custom input prompt blocking is needed
+  // If Pyodide is ready and available
   if (pyodideInstance) {
     try {
       let stdout = [];
@@ -89,7 +90,6 @@ builtins.input = custom_input
       };
     } catch (pyErr) {
       console.warn("Pyodide error, evaluating with resilient engine:", pyErr);
-      // Fallback to local engine to present clean, student-friendly errors
     }
   }
 
@@ -99,20 +99,19 @@ builtins.input = custom_input
 
 /**
  * Resilient Instant Local Python Engine
- * Evaluates standard Python statements (Levels 1-8)
+ * Evaluates standard Python statements (Levels 1-12)
  */
 async function runWithResilientEngine(code, onInputRequest) {
   const outputLines = [];
   const scope = {};
+  const classes = {};
 
   const cleanLines = code
     .split("\n")
     .map(line => {
-      // Keep indentation, but strip inline comments if not inside quotes
       const commentIdx = line.indexOf("#");
       if (commentIdx !== -1) {
         const before = line.slice(0, commentIdx);
-        // Simple check if comment is outside quotes
         const quotesCount = (before.match(/["']/g) || []).length;
         if (quotesCount % 2 === 0) {
           return before.trimEnd();
@@ -141,6 +140,12 @@ async function runWithResilientEngine(code, onInputRequest) {
       return e.slice(1, -1);
     }
 
+    // str(x)
+    const strMatch = e.match(/^str\((.*)\)$/);
+    if (strMatch) {
+      return String(evaluateExpression(strMatch[1], localScope));
+    }
+
     // len(item)
     const lenMatch = e.match(/^len\((.*)\)$/);
     if (lenMatch) {
@@ -148,13 +153,56 @@ async function runWithResilientEngine(code, onInputRequest) {
       return target != null && target.length !== undefined ? target.length : 0;
     }
 
-    // List index: employees[0]
-    const indexMatch = e.match(/^([a-zA-Z_]\w*)\[(\d+)\]$/);
-    if (indexMatch) {
-      const varName = indexMatch[1];
-      const idx = parseInt(indexMatch[2], 10);
+    // Dict lookup or list index: grid["sector"] or employees[0]
+    const keyMatch = e.match(/^([a-zA-Z_]\w*)\[(.*)\]$/);
+    if (keyMatch) {
+      const varName = keyMatch[1];
+      const keyVal = evaluateExpression(keyMatch[2], localScope);
       const val = localScope[varName] !== undefined ? localScope[varName] : scope[varName];
-      if (Array.isArray(val)) return val[idx];
+      if (val && val[keyVal] !== undefined) return val[keyVal];
+      if (Array.isArray(val) && typeof keyVal === "number") return val[keyVal];
+    }
+
+    // Object property: self.explorer or core.name
+    const propMatch = e.match(/^([a-zA-Z_]\w*)\.([a-zA-Z_]\w*)$/);
+    if (propMatch) {
+      const objName = propMatch[1];
+      const propName = propMatch[2];
+      const obj = localScope[objName] !== undefined ? localScope[objName] : scope[objName];
+      if (obj && obj[propName] !== undefined) return obj[propName];
+    }
+
+    // Object method call: core.boot() or self.restore()
+    const methodMatch = e.match(/^([a-zA-Z_]\w*)\.([a-zA-Z_]\w*)\((.*)\)$/);
+    if (methodMatch) {
+      const objName = methodMatch[1];
+      const methodName = methodMatch[2];
+      const argStr = methodMatch[3].trim();
+      const obj = localScope[objName] !== undefined ? localScope[objName] : scope[objName];
+      if (obj && typeof obj[methodName] === "function") {
+        const args = argStr ? splitParams(argStr).map(a => evaluateExpression(a, localScope)) : [];
+        return obj[methodName](...args);
+      }
+    }
+
+    // List comprehension: [score for score in traffic_scores if score > 50]
+    const compMatch = e.match(/^\[(.*)\s+for\s+([a-zA-Z_]\w*)\s+in\s+(.*?)(?:\s+if\s+(.*))?\]$/);
+    if (compMatch) {
+      const exprOut = compMatch[1].trim();
+      const itemVar = compMatch[2].trim();
+      const iterTarget = evaluateExpression(compMatch[3].trim(), localScope);
+      const condition = compMatch[4] ? compMatch[4].trim() : null;
+
+      if (Array.isArray(iterTarget)) {
+        const result = [];
+        for (let item of iterTarget) {
+          const iterScope = { ...localScope, [itemVar]: item };
+          if (!condition || evaluateExpression(condition, iterScope)) {
+            result.push(evaluateExpression(exprOut, iterScope));
+          }
+        }
+        return result;
+      }
     }
 
     // List literal: ["Aisha", "Rahul"]
@@ -165,13 +213,36 @@ async function runWithResilientEngine(code, onInputRequest) {
       return parts.map(p => evaluateExpression(p, localScope));
     }
 
-    // Function call: greet("Alex")
+    // Dict literal: {"sector": "Downtown", "power": True}
+    if (e.startsWith("{") && e.endsWith("}")) {
+      const inner = e.slice(1, -1).trim();
+      if (!inner) return {};
+      const dictObj = {};
+      const pairs = splitParams(inner);
+      for (let pair of pairs) {
+        const colonIdx = pair.indexOf(":");
+        if (colonIdx !== -1) {
+          const k = evaluateExpression(pair.slice(0, colonIdx).trim(), localScope);
+          const v = evaluateExpression(pair.slice(colonIdx + 1).trim(), localScope);
+          dictObj[k] = v;
+        }
+      }
+      return dictObj;
+    }
+
+    // Function call or Class constructor: greet("Alex") or QuantumCore("Alpha", 4.2)
     const callMatch = e.match(/^([a-zA-Z_]\w*)\((.*)\)$/);
-    if (callMatch && typeof scope[callMatch[1]] === "function") {
-      const fnName = callMatch[1];
+    if (callMatch) {
+      const targetName = callMatch[1];
       const argStr = callMatch[2].trim();
       const args = argStr ? splitParams(argStr).map(a => evaluateExpression(a, localScope)) : [];
-      return scope[fnName](...args);
+
+      if (classes[targetName]) {
+        return classes[targetName](...args);
+      }
+      if (typeof scope[targetName] === "function") {
+        return scope[targetName](...args);
+      }
     }
 
     // String concatenation with +
@@ -181,11 +252,11 @@ async function runWithResilientEngine(code, onInputRequest) {
     }
 
     // Comparison expression
-    const compMatch = e.match(/(.*?)(==|!=|<=|>=|<|>)(.*)/);
-    if (compMatch) {
-      const left = evaluateExpression(compMatch[1].trim(), localScope);
-      const op = compMatch[2];
-      const right = evaluateExpression(compMatch[3].trim(), localScope);
+    const cmpMatch = e.match(/(.*?)(==|!=|<=|>=|<|>)(.*)/);
+    if (cmpMatch) {
+      const left = evaluateExpression(cmpMatch[1].trim(), localScope);
+      const op = cmpMatch[2];
+      const right = evaluateExpression(cmpMatch[3].trim(), localScope);
       if (op === "==") return left == right;
       if (op === "!=") return left != right;
       if (op === "<") return left < right;
@@ -233,19 +304,110 @@ async function runWithResilientEngine(code, onInputRequest) {
         continue;
       }
 
+      // class Definition block
+      const classMatch = line.match(/^class\s+([a-zA-Z_]\w*)\s*:/);
+      if (classMatch) {
+        const className = classMatch[1];
+        const classMethods = {};
+        i++;
+
+        while (i < cleanLines.length && (cleanLines[i].startsWith("    ") || cleanLines[i].startsWith("\t"))) {
+          const cLine = cleanLines[i].trim();
+          const defMethodMatch = cLine.match(/^def\s+([a-zA-Z_]\w*)\s*\((.*?)\)\s*:/);
+          if (defMethodMatch) {
+            const methodName = defMethodMatch[1];
+            const methodParams = defMethodMatch[2].split(",").map(p => p.trim()).filter(Boolean);
+            const methodBody = [];
+            i++;
+            while (i < cleanLines.length && (cleanLines[i].startsWith("        ") || cleanLines[i].startsWith("\t\t"))) {
+              methodBody.push(cleanLines[i].trim());
+              i++;
+            }
+            classMethods[methodName] = { params: methodParams, body: methodBody };
+          } else {
+            i++;
+          }
+        }
+
+        classes[className] = (...args) => {
+          const instance = {};
+          // Bind methods to instance
+          Object.entries(classMethods).forEach(([mName, mDef]) => {
+            instance[mName] = (...mArgs) => {
+              const localScope = { self: instance };
+              mDef.params.slice(1).forEach((p, idx) => {
+                localScope[p] = mArgs[idx];
+              });
+
+              for (let bLine of mDef.body) {
+                // self.prop = val
+                const selfAssign = bLine.match(/^self\.([a-zA-Z_]\w*)\s*=\s*(.*)$/);
+                if (selfAssign) {
+                  instance[selfAssign[1]] = evaluateExpression(selfAssign[2], localScope);
+                  continue;
+                }
+                // self.dict[k] = val
+                const selfDictAssign = bLine.match(/^self\.([a-zA-Z_]\w*)\[(.*?)\]\s*=\s*(.*)$/);
+                if (selfDictAssign) {
+                  const dName = selfDictAssign[1];
+                  const k = evaluateExpression(selfDictAssign[2], localScope);
+                  const v = evaluateExpression(selfDictAssign[3], localScope);
+                  if (!instance[dName]) instance[dName] = {};
+                  instance[dName][k] = v;
+                  continue;
+                }
+                // for loop inside method
+                const mForInMatch = bLine.match(/^for\s+([a-zA-Z_]\w*)\s+in\s+self\.([a-zA-Z_]\w*)\s*:/);
+                if (mForInMatch) {
+                  const loopVar = mForInMatch[1];
+                  const listName = mForInMatch[2];
+                  const items = instance[listName] || [];
+                  for (let itm of items) {
+                    localScope[loopVar] = itm;
+                    for (let innerLine of mDef.body) {
+                      if (innerLine.startsWith("print(")) {
+                        const argStr = innerLine.slice(6, -1);
+                        const aList = splitParams(argStr).map(p => evaluateExpression(p, localScope));
+                        outputLines.push(aList.join(" "));
+                      }
+                    }
+                  }
+                  continue;
+                }
+                // print statement inside method
+                if (bLine.startsWith("print(")) {
+                  const argStr = bLine.slice(6, -1);
+                  const aList = splitParams(argStr).map(p => evaluateExpression(p, localScope));
+                  outputLines.push(aList.join(" "));
+                  continue;
+                }
+                // return statement
+                if (bLine.startsWith("return ")) {
+                  return evaluateExpression(bLine.slice(7), localScope);
+                }
+              }
+            };
+          });
+
+          // Run __init__ if defined
+          if (instance["__init__"]) {
+            instance["__init__"](...args);
+          }
+          return instance;
+        };
+        continue;
+      }
+
       // try / except block
       if (line.startsWith("try:")) {
         let tryBlock = [];
         let exceptBlock = [];
-        let exceptType = "";
         i++;
         while (i < cleanLines.length && (cleanLines[i].startsWith("    ") || cleanLines[i].startsWith("\t"))) {
           tryBlock.push(cleanLines[i]);
           i++;
         }
         if (i < cleanLines.length && cleanLines[i].trim().startsWith("except")) {
-          const excLine = cleanLines[i].trim();
-          exceptType = excLine.replace("except", "").replace(":", "").trim();
           i++;
           while (i < cleanLines.length && (cleanLines[i].startsWith("    ") || cleanLines[i].startsWith("\t"))) {
             exceptBlock.push(cleanLines[i]);
@@ -253,12 +415,10 @@ async function runWithResilientEngine(code, onInputRequest) {
           }
         }
 
-        // Execute try block; if error thrown, run except block
         let caught = false;
         try {
           for (let tryLine of tryBlock) {
             const tl = tryLine.trim();
-            // Check for int("invalid_number")
             if (tl.includes("int(") && tl.includes('"') && isNaN(Number(tl.match(/int\(["'](.*?)["']\)/)?.[1]))) {
               caught = true;
               break;
@@ -309,11 +469,11 @@ async function runWithResilientEngine(code, onInputRequest) {
         continue;
       }
 
-      // for loop block
-      const forMatch = line.match(/^for\s+([a-zA-Z_]\w*)\s+in\s+range\((.*?)\)\s*:/);
-      if (forMatch) {
-        const loopVar = forMatch[1];
-        const rangeArgs = forMatch[2].split(",").map(a => parseInt(a.trim(), 10));
+      // for in range(...) block
+      const forRangeMatch = line.match(/^for\s+([a-zA-Z_]\w*)\s+in\s+range\((.*?)\)\s*:/);
+      if (forRangeMatch) {
+        const loopVar = forRangeMatch[1];
+        const rangeArgs = forRangeMatch[2].split(",").map(a => parseInt(a.trim(), 10));
         let start = 0;
         let stop = 0;
         if (rangeArgs.length === 1) {
@@ -376,6 +536,18 @@ async function runWithResilientEngine(code, onInputRequest) {
         continue;
       }
 
+      // Method call statement: system.restore()
+      const methodStmtMatch = line.match(/^([a-zA-Z_]\w*)\.([a-zA-Z_]\w*)\((.*)\)$/);
+      if (methodStmtMatch && scope[methodStmtMatch[1]] && typeof scope[methodStmtMatch[1]][methodStmtMatch[2]] === "function") {
+        const obj = scope[methodStmtMatch[1]];
+        const fn = obj[methodStmtMatch[2]];
+        const argStr = methodStmtMatch[3].trim();
+        const args = argStr ? splitParams(argStr).map(a => evaluateExpression(a, scope)) : [];
+        fn(...args);
+        i++;
+        continue;
+      }
+
       // print(...) statement
       if (line.startsWith("print(") && line.endsWith(")")) {
         const argStr = line.slice(6, -1);
@@ -397,9 +569,19 @@ async function runWithResilientEngine(code, onInputRequest) {
         continue;
       }
 
+      // Dict key assignment: grid["status"] = "Operational"
+      const dictAssignMatch = line.match(/^([a-zA-Z_]\w*)\[(.*?)\]\s*=\s*(.*)$/);
+      if (dictAssignMatch) {
+        const dictName = dictAssignMatch[1];
+        const k = evaluateExpression(dictAssignMatch[2], scope);
+        const v = evaluateExpression(dictAssignMatch[3], scope);
+        if (!scope[dictName]) scope[dictName] = {};
+        scope[dictName][k] = v;
+        i++;
+        continue;
+      }
+
       // Variable assignment with input()
-      // e.g. name = input("Name: ")
-      // or age = int(input("Age: "))
       const inputAssignMatch = line.match(/^([a-zA-Z_]\w*)\s*=\s*(int\()?\s*input\((.*?)\)\s*\)?$/);
       if (inputAssignMatch) {
         const varName = inputAssignMatch[1];
@@ -416,7 +598,6 @@ async function runWithResilientEngine(code, onInputRequest) {
       }
 
       // Regular Variable assignment
-      // e.g. name = "Alex", employees = ["Aisha", "Rahul"]
       const assignMatch = line.match(/^([a-zA-Z_]\w*)\s*=\s*(.*)$/);
       if (assignMatch) {
         const varName = assignMatch[1];

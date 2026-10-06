@@ -7,7 +7,7 @@ export function Sidebar() {
 
   const navItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutGrid },
-    { id: "quest_map", label: "Quest map", icon: Map, badge: "18" },
+    { id: "quest_map", label: "Quest map", icon: Map, badge: "12" },
     { id: "achievements", label: "Achievements", icon: Award },
     { id: "profile", label: "My profile", icon: User },
   ];
@@ -15,7 +15,7 @@ export function Sidebar() {
   const todayCompleted = completedMissions.length > 1;
 
   return (
-    <aside className="w-64 flex-shrink-0 bg-[#F8F9F5] border-r border-[#E6EDE6] flex flex-col justify-between p-5 min-h-screen select-none">
+    <aside className="fixed top-0 left-0 w-64 h-screen bg-[#F8F9F5] border-r border-[#E6EDE6] flex flex-col justify-between p-5 select-none z-30 overflow-y-auto scrollbar-none">
       {/* Top brand & navigation */}
       <div className="space-y-7">
         {/* Brand Logo */}
